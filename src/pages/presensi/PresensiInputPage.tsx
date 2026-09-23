@@ -307,15 +307,14 @@ export function PresensiInputPage() {
                       const available = isDateAvailable(date);
                       const isToday = date.getTime() === today.getTime();
                       const isSelected = selectedDate === formatDateStr(date);
-                      const isPast = date < today;
 
                       return (
                         <button
                           key={i}
                           onClick={() => handleDateClick(date)}
-                          disabled={!available || isPast}
+                          disabled={!available}
                           className={`relative h-10 rounded-lg text-sm font-medium transition-all ${
-                            !available || isPast
+                            !available
                               ? 'text-gray-300 cursor-not-allowed'
                               : isSelected
                               ? 'bg-cyan-500 text-white shadow-md ring-2 ring-cyan-300'
@@ -325,7 +324,7 @@ export function PresensiInputPage() {
                           }`}
                         >
                           {date.getDate()}
-                          {available && !isPast && (
+                          {available && (
                             <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full ${isSelected ? 'bg-white' : 'bg-cyan-400'}`} />
                           )}
                         </button>
