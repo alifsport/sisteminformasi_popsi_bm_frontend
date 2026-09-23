@@ -85,6 +85,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
 
+    // If already authenticated from login, just finish loading
+    const { isAuthenticated } = get();
+    if (isAuthenticated) {
+      set({ isLoading: false });
+      return;
+    }
+
     try {
       const response = await apiClient.post('/auth/refresh');
       const { accessToken } = response.data.data;
