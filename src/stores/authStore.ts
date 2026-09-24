@@ -29,11 +29,27 @@ interface AuthState {
   // Active role for dual-profile users
   activeRole: 'pelatih' | 'anggota' | null;
   setActiveRole: (role: 'pelatih' | 'anggota') => void;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, remember?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
   checkAuth: () => Promise<void>;
   isDualRole: () => boolean;
+}
+
+// Token storage helpers
+function getAccessToken(): string | null {
+  return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+}
+function setAccessToken(token: string, remember: boolean = false) {
+  if (remember) {
+    localStorage.setItem('accessToken', token);
+  } else {
+    sessionStorage.setItem('accessToken', token);
+  }
+}
+function removeAccessToken() {
+  localStorage.removeItem('accessToken');
+  sessionStorage.removeItem('accessToken');
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -49,15 +65,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return !!(user?.hasAnggotaProfile && user?.hasPelatihProfile);
   },
 
-  login: async (email: string, password: string) => {
+  login: async (email: string, password: string, remember: boolean = false) => {
     const response = await apiClient.post('/auth/login', { email, password });
     const { user, accessToken } = response.data.data;
-    sessionStorage.setItem('accessToken', accessToken);
+    setAccessToken(accessToken, remember);
 
-    // Auto-set active role for dual-profile users
     let activeRole: 'pelatih' | 'anggota' | null = null;
     if (user.hasPelatihProfile && user.hasAnggotaProfile) {
-      activeRole = 'pelatih'; // Default to pelatih view
+      activeRole = 'pelatih';
     }
 
     set({ user, isAuthenticated: true, activeRole });
@@ -69,7 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // Ignore logout errors
     } finally {
-      sessionStorage.removeItem('accessToken');
+      removeAccessToken();
       set({ user: null, isAuthenticated: false, activeRole: null });
     }
   },
@@ -79,30 +94,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   checkAuth: async () => {
-    const token = sessionStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (!token) {
       set({ isLoading: false });
       return;
     }
 
-    // If already authenticated from login, just finish loading
     const { isAuthenticated } = get();
     if (isAuthenticated) {
       set({ isLoading: false });
       return;
     }
 
-    // First: decode existing token to check expiry
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const isExpired = payload.exp * 1000 < Date.now();
 
       if (isExpired) {
-        // Token expired, try refresh
         try {
           const response = await apiClient.post('/auth/refresh');
           const { accessToken } = response.data.data;
-          sessionStorage.setItem('accessToken', accessToken);
+          const storedInLocal = !!localStorage.getItem('accessToken');
+          setAccessToken(accessToken, storedInLocal);
 
           const newPayload = JSON.parse(atob(accessToken.split('.')[1]));
           const profileResponse = await apiClient.get('/auth/sessions');
@@ -122,12 +135,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isLoading: false,
           });
         } catch {
-          sessionStorage.removeItem('accessToken');
+          removeAccessToken();
           set({ user: null, isAuthenticated: false, isLoading: false, activeRole: null });
         }
       } else {
-        // Token still valid, use it directly (don't wait for backend refresh)
-        // Try to refresh in background for profile data, but don't block auth
+        // Token valid — auth immediately, fetch profile in background
         set({
           user: {
             id: payload.id,
@@ -142,29 +154,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
         });
 
-        // Background: fetch profile data (non-blocking)
-        apiClient.get('/auth/sessions').then(profileResponse => {
-          const profileData = profileResponse.data.data;
+        apiClient.get('/auth/sessions').then(res => {
+          const d = res.data.data;
           set({
             user: {
               id: payload.id,
               email: payload.email,
               role: payload.role,
-              hasAnggotaProfile: profileData?.anggota_profile ? true : false,
-              hasPelatihProfile: profileData?.pelatih_profile ? true : false,
-              anggotaProfile: profileData?.anggota_profile || null,
-              pelatihProfile: profileData?.pelatih_profile || null,
+              hasAnggotaProfile: !!d?.anggota_profile,
+              hasPelatihProfile: !!d?.pelatih_profile,
+              anggotaProfile: d?.anggota_profile || null,
+              pelatihProfile: d?.pelatih_profile || null,
             },
           });
         }).catch(() => {});
 
-        // Background: refresh token for next time
         apiClient.post('/auth/refresh').then(res => {
-          sessionStorage.setItem('accessToken', res.data.data.accessToken);
+          const storedInLocal = !!localStorage.getItem('accessToken');
+          setAccessToken(res.data.data.accessToken, storedInLocal);
         }).catch(() => {});
       }
     } catch {
-      sessionStorage.removeItem('accessToken');
+      removeAccessToken();
       set({ user: null, isAuthenticated: false, isLoading: false, activeRole: null });
     }
   },

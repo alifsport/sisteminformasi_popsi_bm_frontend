@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuthStore();
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, remember);
       toast.success('Login berhasil!');
       navigate('/dashboard');
     } catch (error: any) {
@@ -99,7 +100,7 @@ export function LoginPage() {
 
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
                 <span className="text-sm text-gray-600">Ingat saya</span>
               </label>
               <Link to="/forgot-password" className="text-sm font-medium text-primary hover:text-primary-dark transition-colors">
