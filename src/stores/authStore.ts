@@ -92,30 +92,77 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
 
+    // First: decode existing token to check expiry
     try {
-      const response = await apiClient.post('/auth/refresh');
-      const { accessToken } = response.data.data;
-      sessionStorage.setItem('accessToken', accessToken);
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const isExpired = payload.exp * 1000 < Date.now();
 
-      const payload = JSON.parse(atob(accessToken.split('.')[1]));
+      if (isExpired) {
+        // Token expired, try refresh
+        try {
+          const response = await apiClient.post('/auth/refresh');
+          const { accessToken } = response.data.data;
+          sessionStorage.setItem('accessToken', accessToken);
 
-      // Fetch full user data with profiles
-      const profileResponse = await apiClient.get('/auth/sessions');
-      const profileData = profileResponse.data.data;
+          const newPayload = JSON.parse(atob(accessToken.split('.')[1]));
+          const profileResponse = await apiClient.get('/auth/sessions');
+          const profileData = profileResponse.data.data;
 
-      set({
-        user: {
-          id: payload.id,
-          email: payload.email,
-          role: payload.role,
-          hasAnggotaProfile: profileData?.anggota_profile ? true : false,
-          hasPelatihProfile: profileData?.pelatih_profile ? true : false,
-          anggotaProfile: profileData?.anggota_profile || null,
-          pelatihProfile: profileData?.pelatih_profile || null,
-        },
-        isAuthenticated: true,
-        isLoading: false,
-      });
+          set({
+            user: {
+              id: newPayload.id,
+              email: newPayload.email,
+              role: newPayload.role,
+              hasAnggotaProfile: profileData?.anggota_profile ? true : false,
+              hasPelatihProfile: profileData?.pelatih_profile ? true : false,
+              anggotaProfile: profileData?.anggota_profile || null,
+              pelatihProfile: profileData?.pelatih_profile || null,
+            },
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        } catch {
+          sessionStorage.removeItem('accessToken');
+          set({ user: null, isAuthenticated: false, isLoading: false, activeRole: null });
+        }
+      } else {
+        // Token still valid, use it directly (don't wait for backend refresh)
+        // Try to refresh in background for profile data, but don't block auth
+        set({
+          user: {
+            id: payload.id,
+            email: payload.email,
+            role: payload.role,
+            hasAnggotaProfile: false,
+            hasPelatihProfile: false,
+            anggotaProfile: null,
+            pelatihProfile: null,
+          },
+          isAuthenticated: true,
+          isLoading: false,
+        });
+
+        // Background: fetch profile data (non-blocking)
+        apiClient.get('/auth/sessions').then(profileResponse => {
+          const profileData = profileResponse.data.data;
+          set({
+            user: {
+              id: payload.id,
+              email: payload.email,
+              role: payload.role,
+              hasAnggotaProfile: profileData?.anggota_profile ? true : false,
+              hasPelatihProfile: profileData?.pelatih_profile ? true : false,
+              anggotaProfile: profileData?.anggota_profile || null,
+              pelatihProfile: profileData?.pelatih_profile || null,
+            },
+          });
+        }).catch(() => {});
+
+        // Background: refresh token for next time
+        apiClient.post('/auth/refresh').then(res => {
+          sessionStorage.setItem('accessToken', res.data.data.accessToken);
+        }).catch(() => {});
+      }
     } catch {
       sessionStorage.removeItem('accessToken');
       set({ user: null, isAuthenticated: false, isLoading: false, activeRole: null });
