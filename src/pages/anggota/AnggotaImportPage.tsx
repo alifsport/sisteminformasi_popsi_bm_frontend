@@ -142,10 +142,10 @@ export function AnggotaImportPage() {
   const [pelatihList, setPelatihList] = useState<PelatihItem[]>([]);
 
   useEffect(() => {
-    apiClient.get('/lokasi', { params: { limit: 200 } })
+    apiClient.get('/lokasi', { params: { limit: 100 } })
       .then(res => setLokasiList(res.data?.data || []))
       .catch(() => {});
-    apiClient.get('/pelatih', { params: { limit: 200 } })
+    apiClient.get('/pelatih', { params: { limit: 100 } })
       .then(res => setPelatihList(res.data?.data || []))
       .catch(() => {});
   }, []);
