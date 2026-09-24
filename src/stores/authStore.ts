@@ -36,16 +36,12 @@ interface AuthState {
   isDualRole: () => boolean;
 }
 
-// Token storage helpers
+// Token storage — always use localStorage for persistence
 function getAccessToken(): string | null {
   return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
 }
-function setAccessToken(token: string, remember: boolean = false) {
-  if (remember) {
-    localStorage.setItem('accessToken', token);
-  } else {
-    sessionStorage.setItem('accessToken', token);
-  }
+function setAccessToken(token: string) {
+  localStorage.setItem('accessToken', token);
 }
 function removeAccessToken() {
   localStorage.removeItem('accessToken');
@@ -68,7 +64,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string, remember: boolean = false) => {
     const response = await apiClient.post('/auth/login', { email, password });
     const { user, accessToken } = response.data.data;
-    setAccessToken(accessToken, remember);
+    setAccessToken(accessToken);
 
     let activeRole: 'pelatih' | 'anggota' | null = null;
     if (user.hasPelatihProfile && user.hasAnggotaProfile) {
@@ -114,8 +110,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         try {
           const response = await apiClient.post('/auth/refresh');
           const { accessToken } = response.data.data;
-          const storedInLocal = !!localStorage.getItem('accessToken');
-          setAccessToken(accessToken, storedInLocal);
+          setAccessToken(accessToken);
 
           const newPayload = JSON.parse(atob(accessToken.split('.')[1]));
           const profileResponse = await apiClient.get('/auth/sessions');
@@ -170,8 +165,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }).catch(() => {});
 
         apiClient.post('/auth/refresh').then(res => {
-          const storedInLocal = !!localStorage.getItem('accessToken');
-          setAccessToken(res.data.data.accessToken, storedInLocal);
+          setAccessToken(res.data.data.accessToken);
         }).catch(() => {});
       }
     } catch {
