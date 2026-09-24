@@ -107,25 +107,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const isExpired = payload.exp * 1000 < Date.now();
 
       if (isExpired) {
+        // Token expired — try refresh
         try {
           const response = await apiClient.post('/auth/refresh');
           const { accessToken } = response.data.data;
           setAccessToken(accessToken);
-
           const newPayload = JSON.parse(atob(accessToken.split('.')[1]));
-          const profileResponse = await apiClient.get('/auth/sessions');
-          const profileData = profileResponse.data.data;
-
           set({
-            user: {
-              id: newPayload.id,
-              email: newPayload.email,
-              role: newPayload.role,
-              hasAnggotaProfile: profileData?.anggota_profile ? true : false,
-              hasPelatihProfile: profileData?.pelatih_profile ? true : false,
-              anggotaProfile: profileData?.anggota_profile || null,
-              pelatihProfile: profileData?.pelatih_profile || null,
-            },
+            user: { id: newPayload.id, email: newPayload.email, role: newPayload.role, hasAnggotaProfile: false, hasPelatihProfile: false, anggotaProfile: null, pelatihProfile: null },
             isAuthenticated: true,
             isLoading: false,
           });
@@ -134,39 +123,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           set({ user: null, isAuthenticated: false, isLoading: false, activeRole: null });
         }
       } else {
-        // Token valid — auth immediately, fetch profile in background
+        // Token valid — auth immediately, no background calls
         set({
-          user: {
-            id: payload.id,
-            email: payload.email,
-            role: payload.role,
-            hasAnggotaProfile: false,
-            hasPelatihProfile: false,
-            anggotaProfile: null,
-            pelatihProfile: null,
-          },
+          user: { id: payload.id, email: payload.email, role: payload.role, hasAnggotaProfile: false, hasPelatihProfile: false, anggotaProfile: null, pelatihProfile: null },
           isAuthenticated: true,
           isLoading: false,
         });
-
-        apiClient.get('/auth/sessions').then(res => {
-          const d = res.data.data;
-          set({
-            user: {
-              id: payload.id,
-              email: payload.email,
-              role: payload.role,
-              hasAnggotaProfile: !!d?.anggota_profile,
-              hasPelatihProfile: !!d?.pelatih_profile,
-              anggotaProfile: d?.anggota_profile || null,
-              pelatihProfile: d?.pelatih_profile || null,
-            },
-          });
-        }).catch(() => {});
-
-        apiClient.post('/auth/refresh').then(res => {
-          setAccessToken(res.data.data.accessToken);
-        }).catch(() => {});
       }
     } catch {
       removeAccessToken();
