@@ -108,14 +108,20 @@ interface LokasiItem { id: string; nama: string; }
 interface PelatihItem { id: string; nama_lengkap: string; }
 
 function parseCSV(text: string): ParsedRow[] {
-  const lines = text.trim().split('\n');
+  // Remove BOM and normalize line endings
+  const clean = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = clean.trim().split('\n');
   if (lines.length < 2) return [];
 
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
   const rows: ParsedRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim());
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Simple CSV split (handles basic cases)
+    const values = line.split(',').map(v => v.trim());
     if (values.length < 3) continue;
 
     const row: any = {};
