@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import { useInputPresensi } from '../../hooks/usePresensi';
+import { useAuthStore } from '../../stores/authStore';
 import toast from 'react-hot-toast';
 
 type Step = 1 | 2 | 3;
@@ -65,14 +66,19 @@ export function PresensiInputPage() {
   const [anggotaPresensi, setAnggotaPresensi] = useState<any[]>([]);
   const [loadingAnggota, setLoadingAnggota] = useState(false);
 
-  // Fetch lokasi on mount
+  const { user } = useAuthStore();
+  const isPelatih = user?.role === 'pelatih';
+
+  // Fetch lokasi on mount — pelatih only sees lokasi where they are PJ
   useEffect(() => {
     setLoadingLokasi(true);
-    apiClient.get('/lokasi', { params: { limit: 100 } })
+    const endpoint = isPelatih ? '/presensi/lokasi-saya' : '/lokasi';
+    const params = isPelatih ? {} : { limit: 100 };
+    apiClient.get(endpoint, { params })
       .then(res => setLokasiList(res.data?.data || []))
       .catch(() => toast.error('Gagal memuat data lokasi'))
       .finally(() => setLoadingLokasi(false));
-  }, []);
+  }, [isPelatih]);
 
   // Fetch jadwal when lokasi changes
   useEffect(() => {
