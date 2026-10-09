@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import toast from 'react-hot-toast';
@@ -12,6 +12,17 @@ interface User {
   created_at: string;
 }
 
+interface BackupStats {
+  users: number;
+  anggota: number;
+  pelatih: number;
+  lokasi: number;
+  jadwal: number;
+  presensi: number;
+  penugasan: number;
+  prestasi: number;
+}
+
 const ROLE_LABELS: Record<string, string> = { admin: 'Admin', pelatih: 'Pelatih', anggota: 'Anggota' };
 const STATUS_LABELS: Record<string, string> = { active: 'Aktif', inactive: 'Nonaktif', locked: 'Terkunci' };
 const STATUS_COLORS: Record<string, string> = {
@@ -20,13 +31,22 @@ const STATUS_COLORS: Record<string, string> = {
   locked: 'bg-red-100 text-red-700',
 };
 
-type PengaturanTab = 'user' | 'tema' | 'lainnya';
+type PengaturanTab = 'user' | 'backup' | 'tema' | 'lainnya';
 
 export function PengaturanPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<PengaturanTab>('user');
   const [userList, setUserList] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Backup state
+  const [backupStats, setBackupStats] = useState<BackupStats | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreResult, setRestoreResult] = useState<any>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
   // Modal states
   const [showForm, setShowForm] = useState(false);
@@ -53,6 +73,75 @@ export function PengaturanPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Fetch backup stats when backup tab is active
+  useEffect(() => {
+    if (activeTab === 'backup') {
+      apiClient.get('/backup/stats')
+        .then(res => setBackupStats(res.data?.data || null))
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
+  // Handle backup download
+  const handleBackup = async () => {
+    setIsDownloading(true);
+    try {
+      const res = await apiClient.get('/backup/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `sipbm-backup-${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Backup berhasil di-download');
+    } catch {
+      toast.error('Gagal membuat backup');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // Handle restore file select
+  const handleRestoreFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.json')) {
+      toast.error('File harus berformat .json');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 10MB');
+      return;
+    }
+    setRestoreFile(file);
+    setRestoreResult(null);
+  };
+
+  // Handle restore
+  const handleRestore = async () => {
+    if (!restoreFile) return;
+    setIsRestoring(true);
+    setRestoreResult(null);
+    try {
+      const text = await restoreFile.text();
+      const json = JSON.parse(text);
+      const res = await apiClient.post('/backup/restore', json, { timeout: 120000 });
+      setRestoreResult(res.data);
+      toast.success('Database berhasil di-restore!');
+      setRestoreFile(null);
+      if (restoreInputRef.current) restoreInputRef.current.value = '';
+      setShowRestoreConfirm(false);
+      fetchData();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Gagal restore database';
+      toast.error(msg);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   // Create / Update user
   const handleSubmit = async () => {
@@ -121,9 +210,10 @@ export function PengaturanPage() {
   const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors';
 
   const tabs: { key: PengaturanTab; label: string; icon: string }[] = [
-    { key: 'user', label: 'Pengaturan User', icon: '👤' },
-    { key: 'tema', label: 'Pengaturan Tema', icon: '🎨' },
-    { key: 'lainnya', label: 'Pengaturan Lainnya', icon: '⚙️' },
+    { key: 'user', label: 'User', icon: '👤' },
+    { key: 'backup', label: 'Backup & Restore', icon: '📦' },
+    { key: 'tema', label: 'Tema', icon: '🎨' },
+    { key: 'lainnya', label: 'Lainnya', icon: '⚙️' },
   ];
 
   return (
@@ -163,6 +253,106 @@ export function PengaturanPage() {
         </div>
       )}
 
+      {/* Tab: Backup & Restore */}
+      {activeTab === 'backup' && (
+        <div className="space-y-6">
+          {/* Stats */}
+          {backupStats && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: 'Users', value: backupStats.users, icon: '👤' },
+                { label: 'Anggota', value: backupStats.anggota, icon: '👥' },
+                { label: 'Pelatih', value: backupStats.pelatih, icon: '🏋️' },
+                { label: 'Lokasi', value: backupStats.lokasi, icon: '📍' },
+                { label: 'Jadwal', value: backupStats.jadwal, icon: '📅' },
+                { label: 'Presensi', value: backupStats.presensi, icon: '✅' },
+                { label: 'Penugasan', value: backupStats.penugasan, icon: '📋' },
+                { label: 'Prestasi', value: backupStats.prestasi, icon: '🏆' },
+              ].map(s => (
+                <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{s.icon}</span>
+                    <div>
+                      <p className="text-lg font-bold text-gray-800">{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Backup */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-xl">⬇️</div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">Backup Database</h3>
+                <p className="text-sm text-gray-500">Download seluruh data aplikasi sebagai file JSON</p>
+              </div>
+            </div>
+            <p className="mb-4 text-sm text-gray-500">
+              Backup mencakup: users, anggota, pelatih, lokasi, jadwal, presensi, penugasan, prestasi, dan notifikasi.
+            </p>
+            <button onClick={handleBackup} disabled={isDownloading}
+              className="rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 transition-all">
+              {isDownloading ? 'Membuat backup...' : '⬇️ Download Backup (.json)'}
+            </button>
+          </div>
+
+          {/* Restore */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-xl">⬆️</div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">Restore Database</h3>
+                <p className="text-sm text-gray-500">Upload file backup untuk mengembalikan data</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 mb-4">
+              <p className="text-sm text-red-700 font-medium">⚠️ Peringatan</p>
+              <p className="text-xs text-red-600 mt-1">Restore akan MENGHAPUS seluruh data saat ini dan menggantinya dengan data dari file backup. Tindakan ini TIDAK BISA DIBATALKAN.</p>
+            </div>
+
+            <input ref={restoreInputRef} type="file" accept=".json" onChange={handleRestoreFileChange} className="hidden" />
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button onClick={() => restoreInputRef.current?.click()}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                📂 Pilih File Backup (.json)
+              </button>
+              {restoreFile && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600">
+                    📄 {restoreFile.name} ({(restoreFile.size / 1024).toFixed(1)} KB)
+                  </span>
+                  <button onClick={() => setShowRestoreConfirm(true)}
+                    className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition-colors">
+                    ⚠️ Restore Sekarang
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Restore Result */}
+          {restoreResult && (
+            <div className="rounded-xl border border-green-200 bg-green-50 p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-green-800 mb-2">✅ Restore Berhasil</h3>
+              <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                {Object.entries(restoreResult?.data || {}).map(([key, val]) => (
+                  <div key={key} className="rounded-lg bg-white p-2 text-center border border-green-200">
+                    <p className="font-bold text-green-700">{String(val)}</p>
+                    <p className="text-xs text-gray-500 capitalize">{key}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Tab: Pengaturan Tema */}
       {activeTab === 'tema' && (
         <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
@@ -182,6 +372,7 @@ export function PengaturanPage() {
       )}
 
       {/* Table */}
+      {activeTab === 'user' && (
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="border-b border-gray-100 bg-gray-50/80">
@@ -233,6 +424,7 @@ export function PengaturanPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Create/Edit Form Modal */}
       {showForm && (
@@ -289,6 +481,46 @@ export function PengaturanPage() {
               {!resetEmail && (
                 <button onClick={handleResetPassword} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Reset Sekarang</button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restore Confirmation */}
+      {showRestoreConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !isRestoring && setShowRestoreConfirm(false)}>
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-xl">⚠️</div>
+              <h3 className="text-lg font-bold text-gray-900">Restore Database?</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Ini akan <span className="font-semibold text-red-600">MENGHAPUS</span> seluruh data saat ini:
+            </p>
+            {backupStats && (
+              <ul className="mb-3 text-sm text-gray-600 space-y-0.5">
+                <li>• {backupStats.users} users</li>
+                <li>• {backupStats.anggota} anggota</li>
+                <li>• {backupStats.pelatih} pelatih</li>
+                <li>• {backupStats.lokasi} lokasi</li>
+                <li>• {backupStats.jadwal} jadwal</li>
+                <li>• {backupStats.presensi} presensi</li>
+              </ul>
+            )}
+            <p className="text-sm text-gray-600 mb-2">Dan menggantinya dengan data dari file:</p>
+            <p className="mb-4 rounded-lg bg-gray-50 p-2 text-sm font-mono text-gray-700">
+              📄 {restoreFile?.name}
+            </p>
+            <p className="mb-4 text-xs text-red-500 font-medium">Tindakan ini TIDAK BISA DIBATALKAN.</p>
+            <div className="flex justify-end gap-2">
+              <button disabled={isRestoring} onClick={() => setShowRestoreConfirm(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+                Batal
+              </button>
+              <button disabled={isRestoring} onClick={handleRestore}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                {isRestoring ? 'Meng-restore...' : 'Ya, Restore Sekarang'}
+              </button>
             </div>
           </div>
         </div>
