@@ -131,6 +131,12 @@ export function LokasiEditPage() {
       if (!jadwalKeterangan) { toast.error('Keterangan wajib diisi untuk latihan tambahan'); return; }
     }
 
+    // Validate pelatih PJ exists
+    if (!form.pelatih_pj_id) {
+      toast.error('Tentukan dulu Pelatih PJ pada bagian "Informasi Tempat Latihan" di atas');
+      return;
+    }
+
     setIsSavingJadwal(true);
     try {
       let tanggal: string;
@@ -153,13 +159,12 @@ export function LokasiEditPage() {
         jam_mulai: `${tanggal}T${jadwalJamMulai}:00`,
         jam_selesai: `${tanggal}T${jadwalJamSelesai}:00`,
         tempat_id: id,
+        pelatih_id: form.pelatih_pj_id,
         tipe_latihan: jadwalTipe === 'Rutin' ? 'Rutin' : 'Khusus',
         target_peserta: 'Semua_Anggota',
         hari: jadwalTipe === 'Rutin' ? jadwalHari : undefined,
         catatan,
       };
-
-      if (form.pelatih_pj_id) payload.pelatih_id = form.pelatih_pj_id;
 
       await apiClient.post('/jadwal', payload);
       toast.success('Jadwal berhasil ditambahkan!');
