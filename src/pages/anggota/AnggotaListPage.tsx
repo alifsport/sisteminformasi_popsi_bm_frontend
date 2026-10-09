@@ -176,7 +176,7 @@ export function AnggotaListPage() {
     setBulkDeleting(true);
     try {
       await apiClient.post('/anggota/bulk-delete', { ids: Array.from(selectedIds) });
-      toast.success(`${selectedIds.size} anggota berhasil diarsipkan`);
+      toast.success(`${selectedIds.size} anggota berhasil dihapus permanen`);
       setSelectedIds(new Set());
       setShowBulkDelete(false);
       fetchAnggota();
@@ -350,7 +350,8 @@ export function AnggotaListPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !deleting && setDeleteId(null)}>
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-900">🗑️ Hapus Anggota?</h3>
-            <p className="mt-2 text-sm text-gray-500">Anggota akan diarsipkan. Tindakan ini dapat dibatalkan melalui menu arsip.</p>
+            <p className="mt-2 text-sm text-red-600 font-medium">Anggota akan dihapus permanen dan tidak dapat dikembalikan.</p>
+            <p className="mt-1 text-xs text-gray-400">Data presensi, penugasan, dan prestasi anggota ini juga ikut terhapus.</p>
             <div className="mt-6 flex justify-end gap-3">
               <button disabled={deleting} onClick={() => setDeleteId(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium transition hover:bg-gray-50 disabled:opacity-50">Batal</button>
               <button disabled={deleting} onClick={handleDelete} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50">
@@ -366,9 +367,10 @@ export function AnggotaListPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !bulkDeleting && setShowBulkDelete(false)}>
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-900">🗑️ Hapus {selectedIds.size} Anggota?</h3>
-            <p className="mt-2 text-sm text-gray-500">
-              {selectedIds.size} anggota akan diarsipkan sekaligus. Tindakan ini dapat dibatalkan melalui menu arsip.
+            <p className="mt-2 text-sm text-red-600 font-medium">
+              {selectedIds.size} anggota akan dihapus permanen dan tidak dapat dikembalikan.
             </p>
+            <p className="mt-1 text-xs text-gray-400">Data presensi, penugasan, dan prestasi anggota ini juga ikut terhapus.</p>
             <div className="mt-6 flex justify-end gap-3">
               <button disabled={bulkDeleting} onClick={() => setShowBulkDelete(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium transition hover:bg-gray-50 disabled:opacity-50">Batal</button>
               <button disabled={bulkDeleting} onClick={handleBulkDelete} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50">

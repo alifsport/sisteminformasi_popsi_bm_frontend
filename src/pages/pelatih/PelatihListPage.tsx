@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import toast from 'react-hot-toast';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -13,11 +13,7 @@ export function PelatihListPage() {
   const [lokasiList, setLokasiList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
-  const [archivedList, setArchivedList] = useState<any[]>([]);
-  const [loadingArchived, setLoadingArchived] = useState(false);
-  const [restoreId, setRestoreId] = useState<string | null>(null);
-  const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [deletePreview, setDeletePreview] = useState<any>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
@@ -43,48 +39,8 @@ export function PelatihListPage() {
       .catch(() => {});
   }, []);
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    try {
-      await apiClient.delete(`/pelatih/${deleteId}`);
-      toast.success('Pelatih berhasil diarsipkan');
-      setDeleteId(null);
-      fetchData();
-    } catch (err: any) { toast.error(err?.response?.data?.message || 'Gagal menghapus pelatih'); }
-  };
-
-  const fetchArchived = async () => {
-    setLoadingArchived(true);
-    try {
-      const res = await apiClient.get('/pelatih/archived');
-      setArchivedList(res.data?.data || []);
-    } catch { toast.error('Gagal memuat arsip pelatih'); }
-    finally { setLoadingArchived(false); }
-  };
-
-  const handleRestore = async () => {
-    if (!restoreId) return;
-    try {
-      await apiClient.put(`/pelatih/${restoreId}/restore`);
-      toast.success('Pelatih berhasil dipulihkan');
-      setRestoreId(null);
-      fetchArchived();
-      fetchData();
-    } catch (err: any) { toast.error(err?.response?.data?.message || 'Gagal memulihkan pelatih'); }
-  };
-
-  const handlePermanentDelete = async () => {
-    if (!permanentDeleteId) return;
-    try {
-      await apiClient.delete(`/pelatih/${permanentDeleteId}/permanent`);
-      toast.success('Pelatih berhasil dihapus permanen');
-      setPermanentDeleteId(null);
-      setDeletePreview(null);
-      fetchArchived();
-    } catch (err: any) { toast.error(err?.response?.data?.message || 'Gagal menghapus pelatih'); }
-  };
-
-  const fetchDeletePreview = async (id: string) => {
+  const openDeletePreview = async (id: string) => {
+    setDeleteId(id);
     setLoadingPreview(true);
     setDeletePreview(null);
     try {
@@ -92,8 +48,21 @@ export function PelatihListPage() {
       setDeletePreview(res.data?.data);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Gagal memuat data');
-      setPermanentDeleteId(null);
+      setDeleteId(null);
     } finally { setLoadingPreview(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await apiClient.delete(`/pelatih/${deleteId}`);
+      toast.success('Pelatih berhasil dihapus permanen');
+      setDeleteId(null);
+      setDeletePreview(null);
+      fetchData();
+    } catch (err: any) { toast.error(err?.response?.data?.message || 'Gagal menghapus pelatih'); }
+    finally { setDeleting(false); }
   };
 
   return (
@@ -101,10 +70,6 @@ export function PelatihListPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div><h1 className="text-2xl font-bold">Manajemen Pelatih</h1><p className="text-muted-foreground">Kelola data pelatih</p></div>
         <div className="flex gap-2">
-          <button onClick={() => { setShowArchived(true); fetchArchived(); }}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-            📦 Arsip
-          </button>
           <button onClick={() => navigate('/pelatih/import')} className="rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/5">📥 Import</button>
           <button onClick={() => navigate('/pelatih/tambah')} className="rounded-lg bg-gradient-to-r from-primary to-primary-dark px-4 py-2 text-sm font-semibold text-white shadow">+ Tambah Pelatih</button>
         </div>
@@ -146,7 +111,7 @@ export function PelatihListPage() {
                   <div className="flex gap-1">
                     <button onClick={() => navigate(`/pelatih/${p.id}`)} className="rounded px-2 py-1 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100">Lihat</button>
                     <button onClick={() => navigate(`/pelatih/${p.id}/edit`)} className="rounded px-2 py-1 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100">Edit</button>
-                    <button onClick={() => setDeleteId(p.id)} className="rounded px-2 py-1 text-xs bg-red-50 text-red-700 hover:bg-red-100">Hapus</button>
+                    <button onClick={() => openDeletePreview(p.id)} className="rounded px-2 py-1 text-xs bg-red-50 text-red-700 hover:bg-red-100">Hapus</button>
                   </div>
                 </td>
               </tr>
@@ -167,95 +132,8 @@ export function PelatihListPage() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
+      {/* Delete Confirmation - Detail */}
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-lg bg-white p-6 shadow-xl max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold mb-2">Hapus Pelatih?</h3>
-            <p className="text-sm text-gray-600 mb-1">Pelatih akan diarsipkan dan tidak muncul di daftar.</p>
-            <p className="text-xs text-gray-400 mb-4">Data historis (jadwal, presensi) tetap tersimpan.</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteId(null)} className="rounded-lg border px-4 py-2 text-sm">Tidak</button>
-              <button onClick={handleDelete} className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700">Ya, Hapus</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Archive Modal */}
-      {showArchived && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-xl bg-white shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between border-b p-5">
-              <h3 className="text-lg font-semibold">📦 Arsip Pelatih</h3>
-              <button onClick={() => setShowArchived(false)} className="rounded-lg p-1 hover:bg-gray-100 transition-colors">
-                <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="overflow-y-auto p-5 flex-1">
-              {loadingArchived ? (
-                <div className="py-8 text-center text-gray-500">Memuat arsip...</div>
-              ) : archivedList.length === 0 ? (
-                <div className="py-8 text-center text-gray-400">
-                  <div className="text-3xl mb-2">📭</div>
-                  Tidak ada pelatih dalam arsip
-                </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="border-b bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium text-gray-600">Nama</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-600">ID Pelatih</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-600">Diarsipkan</th>
-                      <th className="px-3 py-2 text-center font-medium text-gray-600">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {archivedList.map((p: any) => (
-                      <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 font-medium">{p.nama_lengkap}</td>
-                        <td className="px-3 py-2 text-gray-500">{p.id_pelatih}</td>
-                        <td className="px-3 py-2 text-xs text-gray-400">
-                          {p.deleted_at ? new Date(p.deleted_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex justify-center gap-1">
-                            <button onClick={() => setRestoreId(p.id)}
-                              className="rounded px-2 py-1 text-xs bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
-                              ↩️ Pulihkan
-                            </button>
-                            <button onClick={() => { setPermanentDeleteId(p.id); fetchDeletePreview(p.id); }}
-                              className="rounded px-2 py-1 text-xs bg-red-50 text-red-700 hover:bg-red-100 transition-colors">
-                              🗑️ Hapus
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Restore Confirmation */}
-      {restoreId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="rounded-lg bg-white p-6 shadow-xl max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold mb-2">Pulihkan Pelatih?</h3>
-            <p className="text-sm text-gray-600 mb-4">Pelatih akan dikembalikan ke daftar aktif.</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setRestoreId(null)} className="rounded-lg border px-4 py-2 text-sm">Batal</button>
-              <button onClick={handleRestore} className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700">Pulihkan</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Permanent Delete Confirmation - Detail */}
-      {permanentDeleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="rounded-xl bg-white shadow-2xl max-w-lg w-full mx-4 max-h-[85vh] flex flex-col">
             {/* Header */}
@@ -428,13 +306,14 @@ export function PelatihListPage() {
                   : 'Tidak ada data terkait'}
               </p>
               <div className="flex gap-2">
-                <button onClick={() => { setPermanentDeleteId(null); setDeletePreview(null); }}
-                  className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-white transition-colors">
+                <button onClick={() => { setDeleteId(null); setDeletePreview(null); }}
+                  disabled={deleting}
+                  className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-white transition-colors disabled:opacity-50">
                   Batal
                 </button>
-                <button onClick={handlePermanentDelete} disabled={loadingPreview || !deletePreview}
+                <button onClick={handleDelete} disabled={loadingPreview || deleting || !deletePreview}
                   className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50 transition-colors">
-                  Ya, Hapus Semua
+                  {deleting ? 'Menghapus...' : 'Ya, Hapus Permanen'}
                 </button>
               </div>
             </div>

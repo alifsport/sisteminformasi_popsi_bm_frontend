@@ -81,12 +81,6 @@ export const anggotaApi = {
   delete: (id: string) =>
     apiClient.delete(`/anggota/${id}`),
 
-  restore: (id: string) =>
-    apiClient.post(`/anggota/${id}/restore`),
-
-  getArchived: (query?: AnggotaQuery) =>
-    apiClient.get<{ data: PaginatedResponse<Anggota> }>('/anggota/archived', { params: query }),
-
   getStats: () =>
     apiClient.get<{ data: any }>('/anggota/stats'),
 
