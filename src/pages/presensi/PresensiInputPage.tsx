@@ -44,7 +44,11 @@ function getFirstDayOfMonth(year: number, month: number): number {
 }
 
 function formatDateStr(date: Date): string {
-  return date.toISOString().split('T')[0];
+  // Pakai waktu LOCAL, bukan UTC (toISOString geser mundur 1 hari untuk WIB)
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export function PresensiInputPage() {
